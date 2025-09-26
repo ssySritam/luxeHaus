@@ -1,0 +1,1082 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>LuxeHaus — Designer fashion explorer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Tailwind via CDN for rapid styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- GSAP for animations -->
+    <script src="https://unpkg.com/gsap@3.12.2/dist/gsap.min.js"></script>
+    <script src="https://unpkg.com/gsap@3.12.2/dist/ScrollTrigger.min.js"></script>
+    <!-- Three.js for 3D background -->
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <!-- Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0b0f14;
+            --card: rgba(255,255,255,0.06);
+            --glass: rgba(255,255,255,0.08);
+            --text: #e8eaed;
+            --muted: #aeb4bf;
+            --accent: #7c3aed; /* purple */
+            --accent-2: #14b8a6; /* teal */
+            --ring: rgba(124,58,237,0.35);
+            --gold: #d4af37;
+            --neon: #00ff94;
+        }
+
+        html, body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+            scroll-behavior: smooth;
+        }
+        /* Glass + layers */
+        .glass {
+            backdrop-filter: saturate(140%) blur(14px);
+            background: var(--glass);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid rgba(255,255,255,0.08);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        }
+
+        .ring {
+            box-shadow: 0 0 0 3px var(--ring);
+        }
+        /* Parallax hover */
+        .parallax {
+            perspective: 900px;
+            transform-style: preserve-3d;
+        }
+
+        .parallax-inner {
+            transform: translateZ(0);
+            transition: transform 0.15s ease, box-shadow 0.2s ease;
+        }
+
+        .parallax:hover .parallax-inner {
+            transform: translateZ(18px) rotateX(2deg) rotateY(-2deg);
+            box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+        }
+        /* Smooth scrolling area for infinite feed */
+        #feed {
+            scroll-padding-top: 140px;
+        }
+        /* Autocomplete dropdown */
+        .autocomplete-item:hover {
+            background: rgba(255,255,255,0.08);
+        }
+        /* Themes */
+        .theme-light {
+            --bg: #f7f7f8;
+            --text: #0e1116;
+            --muted: #475569;
+            --card: #ffffff;
+            --glass: rgba(255,255,255,0.65);
+            --ring: rgba(20,184,166,0.25);
+        }
+
+        .theme-dark {
+            --bg: #0b0f14;
+            --text: #e8eaed;
+            --muted: #aeb4bf;
+            --card: rgba(255,255,255,0.06);
+            --glass: rgba(255,255,255,0.08);
+            --ring: rgba(124,58,237,0.35);
+        }
+
+        .theme-luxe {
+            --bg: #0b0b0b;
+            --text: #ece6d4;
+            --muted: #b7ab87;
+            --card: rgba(212,175,55,0.08);
+            --glass: rgba(212,175,55,0.12);
+            --ring: rgba(212,175,55,0.4);
+            --accent: var(--gold);
+        }
+
+        .theme-neon {
+            --bg: #080a0f;
+            --text: #eafff5;
+            --muted: #a0ffda;
+            --card: rgba(0,255,148,0.07);
+            --glass: rgba(0,255,148,0.12);
+            --ring: rgba(0,255,148,0.35);
+            --accent: var(--neon);
+            --accent-2: #7c3aed;
+        }
+        /* 3D canvas behind content */
+        #bg3d {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+        }
+        /* Layering */
+        header, main, footer, .modal {
+            position: relative;
+            z-index: 2;
+        }
+        /* Drawer */
+        #drawer {
+            position: fixed;
+            right: 0;
+            top: 0;
+            height: 100vh;
+            width: min(540px, 100vw);
+            transform: translateX(110%);
+            transition: transform 0.35s ease;
+            z-index: 50;
+        }
+
+            #drawer.open {
+                transform: translateX(0);
+            }
+        /* Auth modal */
+        .modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            background: rgba(0,0,0,0.45);
+            align-items: center;
+            justify-content: center;
+            z-index: 60;
+        }
+
+            .modal.show {
+                display: flex;
+            }
+        /* Hide scrollbar aesthetic */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="theme-luxe">
+    <canvas id="bg3d"></canvas>
+
+    <!-- Header -->
+    <header class="glass sticky top-0 w-full">
+        <div class="max-w-7xl mx-auto px-4 lg:px-8 py-4 flex items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="h-9 w-9 rounded-lg ring flex items-center justify-center" style="background: rgba(212,175,55,0.15)">
+                    <span class="font-extrabold text-xl" style="font-family: 'Playfair Display', serif;">L</span>
+                </div>
+                <div>
+                    <div class="font-extrabold text-xl tracking-wide" style="font-family: 'Playfair Display', serif;">LuxeHaus</div>
+                    <div class="text-xs text-[color:var(--muted)]">Designer discoveries, powered by motion & intelligence</div>
+                </div>
+            </div>
+
+            <!-- Search + suggestions -->
+            <div class="flex-1 relative">
+                <div class="flex items-center gap-2 bg-[color:var(--card)] border border-white/10 rounded-xl px-3 py-2">
+                    <svg class="w-5 h-5 text-[color:var(--muted)]" viewBox="0 0 24 24" fill="none"><path d="M11 4a7 7 0 015.657 11.657l3.343 3.343-1.414 1.414-3.343-3.343A7 7 0 1111 4zm0 2a5 5 0 100 10 5 5 0 000-10z" fill="currentColor" /></svg>
+                    <input id="searchInput" class="bg-transparent flex-1 outline-none text-sm" placeholder="Search designers, pieces, materials, colors…" />
+                    <button id="clearSearch" class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20">Clear</button>
+                </div>
+                <div id="autocomplete" class="absolute mt-2 w-full hidden card rounded-xl overflow-hidden">
+                    <div id="autocompleteList" class="max-h-60 overflow-auto no-scrollbar"></div>
+                </div>
+            </div>
+
+            <!-- Theme switch -->
+            <div class="flex items-center gap-2">
+                <select id="themeSelect" class="text-sm bg-[color:var(--card)] border border-white/10 rounded-lg px-2 py-2">
+                    <option value="theme-luxe">Luxe</option>
+                    <option value="theme-dark">Dark</option>
+                    <option value="theme-light">Light</option>
+                    <option value="theme-neon">Neon</option>
+                </select>
+                <!-- Auth -->
+                <button id="authBtn" class="text-sm px-3 py-2 rounded ring hover:opacity-90">Login / Sign up</button>
+                <button id="wishlistBtn" class="text-sm px-3 py-2 rounded bg-[color:var(--accent)] text-black font-semibold hover:opacity-90">Wishlist</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="max-w-7xl mx-auto px-4 lg:px-8 mt-10">
+        <div class="grid lg:grid-cols-2 gap-8 items-center">
+            <div>
+                <div class="text-5xl font-extrabold tracking-tight" style="font-family: 'Playfair Display', serif;">
+                    Curated luxury, living motion
+                </div>
+                <p class="mt-4 text-[color:var(--muted)]">
+                    Explore authentic designer garments with immersive visuals, 3D ambience, smooth transitions, and intelligent recommendations.
+                    Search by fabric, silhouette, color, and more—save favorites in your wishlist and compare details in one elegant view.
+                </p>
+                <div class="mt-6 flex items-center gap-3">
+                    <button id="exploreBtn" class="px-4 py-2 rounded-lg bg-[color:var(--accent)] text-black font-semibold hover:opacity-90">Explore collections</button>
+                    <button id="aiBtn" class="px-4 py-2 rounded-lg bg-white/10 border border-white/10 hover:bg-white/20">Ask AI stylist</button>
+                </div>
+                <div class="mt-4 text-xs text-[color:var(--muted)]">
+                    Tip: switch themes, try “cashmere black coat”, “silk dress”, or “leather jacket” in search.
+                </div>
+            </div>
+            <div class="parallax">
+                <div class="parallax-inner card rounded-2xl p-4">
+                    <div class="grid grid-cols-3 gap-2">
+                        <img class="rounded-xl object-cover h-40 w-full" src="https://images.unsplash.com/photo-1542060748-10c28b62716f?q=80&w=1080&auto=format&fit=crop" alt="runway">
+                        <img class="rounded-xl object-cover h-40 w-full" src="https://images.unsplash.com/photo-1512436991641-6745cdb1723f?q=80&w=1080&auto=format&fit=crop" alt="luxury coat">
+                        <img class="rounded-xl object-cover h-40 w-full" src="https://images.unsplash.com/photo-1519741491041-9fa6e35ad027?q=80&w=1080&auto=format&fit=crop" alt="silk dress">
+                        <img class="rounded-xl object-cover h-40 w-full" src="https://images.unsplash.com/photo-1475178626620-e0934f6a08aa?q=80&w=1080&auto=format&fit=crop" alt="leather">
+                        <img class="rounded-xl object-cover h-40 w-full" src="https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=1080&auto=format&fit=crop" alt="cashmere">
+                        <img class="rounded-xl object-cover h-40 w-full" src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1080&auto=format&fit=crop" alt="atelier">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Filters -->
+    <section class="max-w-7xl mx-auto px-4 lg:px-8 mt-10">
+        <div class="glass rounded-xl p-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+                <label class="text-xs text-[color:var(--muted)]">Designer</label>
+                <select id="filterDesigner" class="w-full bg-[color:var(--card)] border border-white/10 rounded-lg px-2 py-2">
+                    <option value="">All</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-[color:var(--muted)]">Category</label>
+                <select id="filterCategory" class="w-full bg-[color:var(--card)] border border-white/10 rounded-lg px-2 py-2">
+                    <option value="">All</option>
+                    <option>Dress</option>
+                    <option>Coat</option>
+                    <option>Jacket</option>
+                    <option>Suit</option>
+                    <option>Shoes</option>
+                    <option>Bags</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-[color:var(--muted)]">Material</label>
+                <select id="filterMaterial" class="w-full bg-[color:var(--card)] border border-white/10 rounded-lg px-2 py-2">
+                    <option value="">All</option>
+                    <option>Silk</option>
+                    <option>Cashmere</option>
+                    <option>Leather</option>
+                    <option>Wool</option>
+                    <option>Cotton</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-xs text-[color:var(--muted)]">Sort</label>
+                <select id="sortSelect" class="w-full bg-[color:var(--card)] border border-white/10 rounded-lg px-2 py-2">
+                    <option value="popularity">Popularity</option>
+                    <option value="price-asc">Price ↑</option>
+                    <option value="price-desc">Price ↓</option>
+                    <option value="new">Newest</option>
+                </select>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feed -->
+    <main id="feed" class="max-w-7xl mx-auto px-4 lg:px-8 mt-8">
+        <div id="grid" class="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+        <div id="loading" class="flex items-center justify-center py-10">
+            <div class="text-sm text-[color:var(--muted)]">Loading more pieces…</div>
+        </div>
+    </main>
+
+    <!-- Drawer details -->
+    <aside id="drawer" class="glass border-l border-white/10">
+        <div class="h-full flex flex-col">
+            <div class="p-4 flex items-center justify-between border-b border-white/10">
+                <div class="font-semibold">Item details</div>
+                <button id="closeDrawer" class="px-3 py-1 rounded bg-white/10 hover:bg-white/20">Close</button>
+            </div>
+            <div id="drawerContent" class="p-4 overflow-auto no-scrollbar space-y-6"></div>
+        </div>
+    </aside>
+
+    <!-- AI Panel -->
+    <section id="aiPanel" class="fixed bottom-4 right-4 w-[min(420px,calc(100vw-32px))] hidden">
+        <div class="card rounded-2xl overflow-hidden">
+            <div class="p-3 flex items-center justify-between">
+                <div class="font-semibold">AI Stylist</div>
+                <button id="aiClose" class="px-2 py-1 text-xs bg-white/10 hover:bg-white/20 rounded">Hide</button>
+            </div>
+            <div id="aiMessages" class="px-3 h-64 overflow-auto no-scrollbar space-y-3">
+                <div class="text-xs text-[color:var(--muted)]">Ask for outfit ideas, fabrics care, sizing tips, or alternatives.</div>
+            </div>
+            <div class="p-3 flex items-center gap-2 border-t border-white/10">
+                <input id="aiInput" class="flex-1 bg-transparent border border-white/10 rounded-lg px-3 py-2 text-sm" placeholder="e.g., Suggest a black silk evening look under ₹50,000" />
+                <button id="aiSend" class="px-3 py-2 rounded bg-[color:var(--accent)] text-black font-semibold">Send</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Auth modal -->
+    <div id="authModal" class="modal">
+        <div class="card rounded-2xl w-[min(520px,calc(100vw-32px))] p-6">
+            <div class="flex items-center justify-between">
+                <div class="text-xl font-bold" style="font-family: 'Playfair Display', serif;">Welcome to LuxeHaus</div>
+                <button id="authClose" class="px-2 py-1 text-xs bg-white/10 hover:bg-white/20 rounded">Close</button>
+            </div>
+            <div class="mt-4 grid grid-cols-2 gap-2">
+                <button id="tabLogin" class="px-3 py-2 rounded bg-white/10 ring">Login</button>
+                <button id="tabSignup" class="px-3 py-2 rounded bg-white/10">Sign up</button>
+            </div>
+            <form id="authForm" class="mt-4 space-y-3">
+                <input id="authEmail" type="email" class="w-full bg-transparent border border-white/10 rounded-lg px-3 py-2" placeholder="Email" required />
+                <input id="authPassword" type="password" class="w-full bg-transparent border border-white/10 rounded-lg px-3 py-2" placeholder="Password (min 6 chars)" required />
+                <div id="nameRow" class="hidden">
+                    <input id="authName" type="text" class="w-full bg-transparent border border-white/10 rounded-lg px-3 py-2" placeholder="Full name" />
+                </div>
+                <button class="w-full px-4 py-2 rounded bg-[color:var(--accent)] text-black font-semibold" type="submit">Continue</button>
+                <div id="authMsg" class="text-xs text-[color:var(--muted)]"></div>
+            </form>
+            <div class="mt-4 text-xs text-[color:var(--muted)]">
+                Demo auth stores credentials locally. Swap with your real backend by hooking into onAuthSubmit().
+            </div>
+        </div>
+    </div>
+
+    <!-- Wishlist modal -->
+    <div id="wishlistModal" class="modal">
+        <div class="card rounded-2xl w-[min(720px,calc(100vw-32px))] p-6">
+            <div class="flex items-center justify-between">
+                <div class="text-xl font-bold" style="font-family: 'Playfair Display', serif;">Your wishlist</div>
+                <button id="wishlistClose" class="px-2 py-1 text-xs bg-white/10 hover:bg-white/20 rounded">Close</button>
+            </div>
+            <div id="wishlistContent" class="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            <div class="mt-4 flex items-center gap-3">
+                <button id="wishlistClear" class="px-3 py-2 rounded bg-white/10 hover:bg-white/20">Clear wishlist</button>
+                <div id="wishlistNote" class="text-xs text-[color:var(--muted)]">Saved locally. Sign in to sync when backend is connected.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="max-w-7xl mx-auto px-4 lg:px-8 mt-16 mb-10 text-[color:var(--muted)]">
+        <div class="glass rounded-xl p-4">
+            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <div class="font-bold mb-2">LuxeHaus</div>
+                    <div class="text-xs">Motion-first luxury discovery with intelligent suggestions, deep product data, and wishlist sync.</div>
+                </div>
+                <div>
+                    <div class="font-bold mb-2">Explore</div>
+                    <ul class="text-xs space-y-1">
+                        <li>Designers</li>
+                        <li>Materials</li>
+                        <li>Runway</li>
+                        <li>Care guides</li>
+                    </ul>
+                </div>
+                <div>
+                    <div class="font-bold mb-2">Support</div>
+                    <ul class="text-xs space-y-1">
+                        <li>Shipping & returns</li>
+                        <li>Size & fit</li>
+                        <li>Contact</li>
+                    </ul>
+                </div>
+                <div>
+                    <div class="font-bold mb-2">Tech</div>
+                    <ul class="text-xs space-y-1">
+                        <li>3D ambience</li>
+                        <li>GSAP transitions</li>
+                        <li>API integrations</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // CONFIG: plug real APIs here. Keep single-file; endpoints receive + return JSON.
+        const CONFIG = {
+            THEME_DEFAULT: localStorage.getItem('theme') || 'theme-luxe',
+            // Product data API (e.g., your fashion backend, marketplace, or aggregator)
+            PRODUCT_API_URL: '',     // e.g., 'https://api.yourfashion.com/products'
+            PRODUCT_API_KEY: '',     // set when available
+            // Image proxy: if you have brand galleries or CDN
+            IMAGE_BASE: '',          // e.g., 'https://cdn.yoursite.com/images/'
+            // AI endpoints: Chat + recommendations (ask your backend to forward to your LLM provider)
+            AI_CHAT_URL: '',         // e.g., 'https://api.yoursite.com/ai/chat'
+            AI_RECO_URL: '',         // e.g., 'https://api.yoursite.com/ai/recommend'
+            AI_KEY: '',              // server key if your backend expects it; NEVER expose provider keys to client
+            // Pagination batch size
+            PAGE_SIZE: 12,
+        };
+
+        // Demo dataset: Replace with PRODUCT_API_URL results
+        const DEMO_PRODUCTS = [
+            // Minimal realistic sample; plug real data from your API
+            // id, name, brand, category, material, price, popularity, dateAdded, images[], colors[], sizes[], description, specs
+            {
+                id: 'p1', name: 'Silk Bias-Cut Evening Dress', brand: 'Saint Laurent', category: 'Dress', material: 'Silk',
+                price: 198000, popularity: 96, dateAdded: '2025-09-01',
+                images: ['https://images.unsplash.com/photo-1519741491041-9fa6e35ad027?q=80&w=1080&auto=format&fit=crop'],
+                colors: ['Black'], sizes: ['XS', 'S', 'M', 'L'],
+                description: 'Fluid silk with bias cut for drape and movement; minimalist neckline and subtle sheen.',
+                specs: { fabric: '100% Silk', origin: 'France', care: 'Dry clean only', length: 'Midi' },
+                tags: ['evening', 'silk', 'black', 'minimal']
+            },
+            {
+                id: 'p2', name: 'Cashmere Double-Breasted Coat', brand: 'Burberry', category: 'Coat', material: 'Cashmere',
+                price: 245000, popularity: 92, dateAdded: '2025-08-20',
+                images: ['https://images.unsplash.com/photo-1512436991641-6745cdb1723f?q=80&w=1080&auto=format&fit=crop'],
+                colors: ['Camel', 'Black'], sizes: ['S', 'M', 'L', 'XL'],
+                description: 'Luxuriously soft cashmere with structured shoulders, peak lapels, and signature lining.',
+                specs: { fabric: '90% Cashmere, 10% Wool', origin: 'UK', care: 'Dry clean only', length: 'Long' },
+                tags: ['coat', 'cashmere', 'camel', 'tailored']
+            },
+            {
+                id: 'p3', name: 'Lambskin Biker Jacket', brand: 'Balenciaga', category: 'Jacket', material: 'Leather',
+                price: 225000, popularity: 88, dateAdded: '2025-08-12',
+                images: ['https://images.unsplash.com/photo-1475178626620-e0934f6a08aa?q=80&w=1080&auto=format&fit=crop'],
+                colors: ['Black'], sizes: ['XS', 'S', 'M', 'L'],
+                description: 'Supple lambskin, asymmetric zip, and boxy silhouette with refined hardware.',
+                specs: { fabric: '100% Lambskin', origin: 'Italy', care: 'Specialist clean', length: 'Hip' },
+                tags: ['leather', 'jacket', 'biker', 'black']
+            },
+            {
+                id: 'p4', name: 'Wool-Silk Tuxedo Suit', brand: 'Gucci', category: 'Suit', material: 'Wool',
+                price: 312000, popularity: 90, dateAdded: '2025-09-10',
+                images: ['https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1080&auto=format&fit=crop'],
+                colors: ['Black'], sizes: ['46', '48', '50', '52'],
+                description: 'Peak lapels with silk facing; tailored fit with crisp shoulder and tapered trousers.',
+                specs: { fabric: '85% Wool, 15% Silk', origin: 'Italy', care: 'Dry clean only', fit: 'Tailored' },
+                tags: ['tuxedo', 'wool', 'silk', 'formal', 'black']
+            },
+            {
+                id: 'p5', name: 'Leather Structured Tote', brand: 'Prada', category: 'Bags', material: 'Leather',
+                price: 185000, popularity: 84, dateAdded: '2025-07-30',
+                images: ['https://images.unsplash.com/photo-1542060748-10c28b62716f?q=80&w=1080&auto=format&fit=crop'],
+                colors: ['Black', 'Bordeaux'], sizes: ['OS'],
+                description: 'Clean lines with premium leather and subtle logo; spacious interior with pocket system.',
+                specs: { fabric: '100% Calfskin', origin: 'Italy', care: 'Protect from moisture', hardware: 'Gold-tone' },
+                tags: ['bag', 'leather', 'structured', 'black']
+            },
+            {
+                id: 'p6', name: 'Suede Chelsea Boots', brand: 'Saint Laurent', category: 'Shoes', material: 'Leather',
+                price: 96000, popularity: 83, dateAdded: '2025-09-05',
+                images: ['https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=1080&auto=format&fit=crop'],
+                colors: ['Sand', 'Black'], sizes: ['40', '41', '42', '43', '44'],
+                description: 'Slim profile, almond toe, elastic panels; refined suede with leather sole.',
+                specs: { fabric: '100% Suede', origin: 'Italy', care: 'Brush gently', heel: '30mm' },
+                tags: ['boots', 'suede', 'chelsea', 'sand']
+            },
+            // Duplicate with slight variations for infinite scroll effect
+            ...Array.from({ length: 48 }).map((_, i) => ({
+                id: 'd' + i,
+                name: ['Silk Slip Dress', 'Cashmere Overcoat', 'Leather Mini Bag', 'Wool Trench', 'Cotton Poplin Shirt'][i % 5],
+                brand: ['Dior', 'Chanel', 'Louis Vuitton', 'Hermès', 'Valentino'][i % 5],
+                category: ['Dress', 'Coat', 'Bags', 'Coat', 'Shirt'][i % 5],
+                material: ['Silk', 'Cashmere', 'Leather', 'Wool', 'Cotton'][i % 5],
+                price: [178000, 262000, 142000, 215000, 56000][i % 5] + (i * 500),
+                popularity: 60 + (i % 40),
+                dateAdded: `2025-08-${String(10 + (i % 20)).padStart(2, '0')}`,
+                images: [
+                    [
+                        'https://images.unsplash.com/photo-1519741491041-9fa6e35ad027?q=80&w=1080&auto=format&fit=crop',
+                        'https://images.unsplash.com/photo-1512436991641-6745cdb1723f?q=80&w=1080&auto=format&fit=crop',
+                        'https://images.unsplash.com/photo-1542060748-10c28b62716f?q=80&w=1080&auto=format&fit=crop',
+                        'https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1080&auto=format&fit=crop',
+                        'https://images.unsplash.com/photo-1475178626620-e0934f6a08aa?q=80&w=1080&auto=format&fit=crop',
+                    ][i % 5]
+                ],
+                colors: [['Black', 'Ivory'], ['Camel'], ['Black', 'Red'], ['Navy'], ['White']][i % 5],
+                sizes: [['XS', 'S', 'M', 'L'], ['S', 'M', 'L', 'XL'], ['OS'], ['S', 'M', 'L'], ['S', 'M', 'L', 'XL']][i % 5],
+                description: 'Meticulously crafted with premium materials and timeless silhouette.',
+                specs: { fabric: ['Silk', 'Cashmere', 'Leather', 'Wool', 'Cotton'][i % 5], origin: ['France', 'Italy', 'UK', 'Italy', 'France'][i % 5], care: 'Dry clean recommended' },
+                tags: ['luxury', 'designer', 'timeless', ['silk', 'cashmere', 'leather', 'wool', 'cotton'][i % 5]]
+            }))
+        ];
+
+        // State
+        let state = {
+            page: 0,
+            query: '',
+            filters: { designer: '', category: '', material: '' },
+            sort: 'popularity',
+            items: [],        // filtered + sorted working set
+            wishlist: JSON.parse(localStorage.getItem('wishlist') || '[]'),
+            user: JSON.parse(localStorage.getItem('user') || 'null'),
+            aiOpen: false,
+        };
+
+        // Theme
+        const themeSelect = document.getElementById('themeSelect');
+        function applyTheme(t) {
+            document.body.classList.remove('theme-light', 'theme-dark', 'theme-luxe', 'theme-neon');
+            document.body.classList.add(t);
+            localStorage.setItem('theme', t);
+        }
+        applyTheme(CONFIG.THEME_DEFAULT);
+        themeSelect.value = CONFIG.THEME_DEFAULT;
+        themeSelect.addEventListener('change', e => applyTheme(e.target.value));
+
+        // Build designer options
+        const designers = Array.from(new Set(DEMO_PRODUCTS.map(p => p.brand))).sort();
+        const filterDesigner = document.getElementById('filterDesigner');
+        designers.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d; opt.textContent = d;
+            filterDesigner.appendChild(opt);
+        });
+
+        // Filters & sort handlers
+        const filterCategory = document.getElementById('filterCategory');
+        const filterMaterial = document.getElementById('filterMaterial');
+        const sortSelect = document.getElementById('sortSelect');
+
+        filterDesigner.onchange = () => { state.filters.designer = filterDesigner.value; refreshItems(); };
+        filterCategory.onchange = () => { state.filters.category = filterCategory.value; refreshItems(); };
+        filterMaterial.onchange = () => { state.filters.material = filterMaterial.value; refreshItems(); };
+        sortSelect.onchange = () => { state.sort = sortSelect.value; refreshItems(); };
+
+        // Search + autocomplete
+        const searchInput = document.getElementById('searchInput');
+        const clearSearch = document.getElementById('clearSearch');
+        const autocomplete = document.getElementById('autocomplete');
+        const autocompleteList = document.getElementById('autocompleteList');
+
+        searchInput.addEventListener('input', e => {
+            state.query = e.target.value.trim().toLowerCase();
+            showAutocomplete(state.query);
+            refreshItems();
+        });
+
+        clearSearch.onclick = () => {
+            searchInput.value = '';
+            state.query = '';
+            hideAutocomplete();
+            refreshItems();
+        };
+
+        function showAutocomplete(q) {
+            if (!q) return hideAutocomplete();
+            const candidates = DEMO_PRODUCTS
+                .filter(p => [p.name, p.brand, p.material, p.category, p.tags.join(' ')].join(' ').toLowerCase().includes(q))
+                .slice(0, 8);
+            autocompleteList.innerHTML = '';
+            candidates.forEach(p => {
+                const row = document.createElement('div');
+                row.className = 'autocomplete-item px-3 py-2 text-sm flex items-center gap-2 cursor-pointer';
+                row.innerHTML = `
+              <div class="w-8 h-8 rounded overflow-hidden">
+                <img src="${p.images[0]}" class="w-full h-full object-cover" />
+              </div>
+              <div class="flex-1">
+                <div class="font-semibold">${p.name}</div>
+                <div class="text-xs text-[color:var(--muted)]">${p.brand} • ${p.material}</div>
+              </div>
+            `;
+                row.onclick = () => {
+                    hideAutocomplete();
+                    openDrawer(p);
+                };
+                autocompleteList.appendChild(row);
+            });
+            autocomplete.classList.remove('hidden');
+        }
+        function hideAutocomplete() { autocomplete.classList.add('hidden'); }
+
+        // Filter + sort logic
+        function applyFilterSort() {
+            const q = state.query;
+            let items = DEMO_PRODUCTS.filter(p => {
+                const passDesigner = !state.filters.designer || p.brand === state.filters.designer;
+                const passCategory = !state.filters.category || p.category === state.filters.category;
+                const passMaterial = !state.filters.material || p.material === state.filters.material;
+                const passQuery = !q || [p.name, p.brand, p.category, p.material, p.tags.join(' ')].join(' ').toLowerCase().includes(q);
+                return passDesigner && passCategory && passMaterial && passQuery;
+            });
+            switch (state.sort) {
+                case 'price-asc': items.sort((a, b) => a.price - b.price); break;
+                case 'price-desc': items.sort((a, b) => b.price - a.price); break;
+                case 'new': items.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded)); break;
+                default: items.sort((a, b) => b.popularity - a.popularity); break;
+            }
+            return items;
+        }
+
+        // Render grid with infinite scroll
+        const grid = document.getElementById('grid');
+        const loading = document.getElementById('loading');
+
+        function refreshItems(resetPage = true) {
+            state.items = applyFilterSort();
+            if (resetPage) state.page = 0;
+            grid.innerHTML = '';
+            appendPage();
+            preloadAIRecommendations(); // optional AI preload
+        }
+
+        function appendPage() {
+            const start = state.page * CONFIG.PAGE_SIZE;
+            const end = start + CONFIG.PAGE_SIZE;
+            const slice = state.items.slice(start, end);
+            slice.forEach(renderCard);
+            state.page++;
+            loading.style.display = state.items.length > end ? 'flex' : 'none';
+            if (state.items.length === 0) {
+                grid.innerHTML = `<div class="text-sm text-[color:var(--muted)]">No items match your filters. Try clearing or changing the query.</div>`;
+            }
+        }
+
+        function renderCard(p) {
+            const card = document.createElement('div');
+            card.className = 'parallax';
+            const inr = document.createElement('div');
+            inr.className = 'parallax-inner card rounded-2xl overflow-hidden';
+            inr.innerHTML = `
+            <div class="relative">
+              <img src="${p.images[0]}" class="w-full h-56 object-cover" alt="${p.name}" />
+              <button data-id="${p.id}" class="wishlist-add absolute top-3 right-3 px-2 py-1 text-xs rounded bg-[color:var(--glass)] border border-white/10 hover:bg-white/20">
+                ${state.wishlist.includes(p.id) ? '♥ Saved' : '♡ Save'}
+              </button>
+            </div>
+            <div class="p-3">
+              <div class="font-semibold">${p.brand}</div>
+              <div class="text-sm">${p.name}</div>
+              <div class="text-xs text-[color:var(--muted)]">${p.material} • ${p.category}</div>
+              <div class="mt-2 flex items-center justify-between">
+                <div class="font-semibold">₹${p.price.toLocaleString('en-IN')}</div>
+                <div class="flex items-center gap-2">
+                  <button class="px-2 py-1 text-xs rounded bg-white/10 hover:bg-white/20" data-open="${p.id}">View</button>
+                  <button class="px-2 py-1 text-xs rounded bg-[color:var(--accent)] text-black" data-buy="${p.id}">Buy</button>
+                </div>
+              </div>
+            </div>
+          `;
+            card.appendChild(inr);
+            grid.appendChild(card);
+
+            // Attach wishlist
+            inr.querySelector('.wishlist-add').onclick = (e) => {
+                const id = e.target.getAttribute('data-id');
+                toggleWishlist(id);
+                e.target.textContent = state.wishlist.includes(id) ? '♥ Saved' : '♡ Save';
+            };
+            // View drawer
+            inr.querySelector('[data-open]').onclick = () => openDrawer(p);
+            // Buy (placeholder)
+            inr.querySelector('[data-buy]').onclick = () => alert('Checkout integration pending.');
+        }
+
+        // Infinite scroll sentinel
+        window.addEventListener('scroll', () => {
+            const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 200;
+            if (nearBottom) appendPage();
+        });
+
+        // Wishlist
+        function toggleWishlist(id) {
+            const idx = state.wishlist.indexOf(id);
+            if (idx >= 0) state.wishlist.splice(idx, 1);
+            else state.wishlist.push(id);
+            localStorage.setItem('wishlist', JSON.stringify(state.wishlist));
+        }
+
+        const wishlistBtn = document.getElementById('wishlistBtn');
+        const wishlistModal = document.getElementById('wishlistModal');
+        const wishlistClose = document.getElementById('wishlistClose');
+        const wishlistContent = document.getElementById('wishlistContent');
+        const wishlistClear = document.getElementById('wishlistClear');
+        wishlistBtn.onclick = () => {
+            wishlistModal.classList.add('show');
+            renderWishlist();
+        };
+        wishlistClose.onclick = () => wishlistModal.classList.remove('show');
+        wishlistClear.onclick = () => {
+            state.wishlist = [];
+            localStorage.setItem('wishlist', '[]');
+            renderWishlist();
+            refreshItems(false);
+        };
+        function renderWishlist() {
+            wishlistContent.innerHTML = '';
+            const items = DEMO_PRODUCTS.filter(p => state.wishlist.includes(p.id));
+            if (items.length === 0) {
+                wishlistContent.innerHTML = `<div class="text-sm text-[color:var(--muted)]">No items saved yet.</div>`;
+                return;
+            }
+            items.forEach(p => {
+                const el = document.createElement('div');
+                el.className = 'card rounded-xl overflow-hidden';
+                el.innerHTML = `
+              <img src="${p.images[0]}" class="w-full h-40 object-cover" />
+              <div class="p-3">
+                <div class="font-semibold">${p.brand}</div>
+                <div class="text-sm">${p.name}</div>
+                <div class="text-xs text-[color:var(--muted)]">${p.material} • ${p.category}</div>
+                <div class="mt-2 flex items-center justify-between">
+                  <div class="font-semibold">₹${p.price.toLocaleString('en-IN')}</div>
+                  <div class="flex items-center gap-2">
+                    <button class="px-2 py-1 text-xs rounded bg-white/10 hover:bg-white/20">Compare</button>
+                    <button class="px-2 py-1 text-xs rounded bg-[color:var(--accent)] text-black">Buy</button>
+                  </div>
+                </div>
+              </div>
+            `;
+                wishlistContent.appendChild(el);
+            });
+        }
+
+        // Drawer details
+        const drawer = document.getElementById('drawer');
+        const drawerContent = document.getElementById('drawerContent');
+        const closeDrawer = document.getElementById('closeDrawer');
+        closeDrawer.onclick = () => drawer.classList.remove('open');
+
+        function openDrawer(p) {
+            drawer.classList.add('open');
+            drawerContent.innerHTML = `
+            <div class="grid grid-cols-2 gap-3">
+              ${p.images.map(src => `<img src="${src}" class="w-full h-40 object-cover rounded-xl" />`).join('')}
+            </div>
+            <div>
+              <div class="text-2xl font-bold" style="font-family: 'Playfair Display', serif;">${p.brand}</div>
+              <div class="text-lg">${p.name}</div>
+              <div class="text-sm text-[color:var(--muted)]">${p.material} • ${p.category}</div>
+            </div>
+            <div class="glass rounded-xl p-3">
+              <div class="font-semibold">₹${p.price.toLocaleString('en-IN')}</div>
+              <div class="mt-2 text-sm">${p.description}</div>
+              <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div><span class="text-[color:var(--muted)]">Fabric:</span> ${p.specs.fabric}</div>
+                <div><span class="text-[color:var(--muted)]">Origin:</span> ${p.specs.origin}</div>
+                <div><span class="text-[color:var(--muted)]">Care:</span> ${p.specs.care}</div>
+                ${p.specs.length ? `<div><span class="text-[color:var(--muted)]">Length:</span> ${p.specs.length}</div>` : ''}
+                ${p.specs.fit ? `<div><span class="text-[color:var(--muted)]">Fit:</span> ${p.specs.fit}</div>` : ''}
+              </div>
+              <div class="mt-3">
+                <label class="text-xs text-[color:var(--muted)]">Color</label>
+                <div class="flex items-center gap-2 mt-1">
+                  ${p.colors.map(c => `<span class="px-2 py-1 text-xs rounded bg-white/10 border border-white/10">${c}</span>`).join('')}
+                </div>
+              </div>
+              <div class="mt-3">
+                <label class="text-xs text-[color:var(--muted)]">Size</label>
+                <div class="flex items-center gap-2 mt-1">
+                  ${p.sizes.map(s => `<button class="px-2 py-1 text-xs rounded bg-white/10 hover:bg-white/20">${s}</button>`).join('')}
+                </div>
+              </div>
+              <div class="mt-4 flex items-center gap-2">
+                <button class="px-3 py-2 rounded bg-[color:var(--accent)] text-black font-semibold">Add to bag</button>
+                <button class="px-3 py-2 rounded bg-white/10 border border-white/10 hover:bg-white/20">Add to wishlist</button>
+              </div>
+            </div>
+            <div class="glass rounded-xl p-3">
+              <div class="font-semibold mb-2">You may also like</div>
+              <div id="drawerReco" class="grid grid-cols-2 gap-2"></div>
+            </div>
+          `;
+            // Simple local recommendations
+            const reco = recommendLocal(p, DEMO_PRODUCTS, 4);
+            const recoWrap = drawerContent.querySelector('#drawerReco');
+            reco.forEach(r => {
+                const item = document.createElement('div');
+                item.className = 'card rounded-xl overflow-hidden cursor-pointer';
+                item.innerHTML = `
+              <img src="${r.images[0]}" class="w-full h-24 object-cover" />
+              <div class="p-2">
+                <div class="text-xs font-semibold">${r.brand}</div>
+                <div class="text-xs">${r.name}</div>
+              </div>
+            `;
+                item.onclick = () => openDrawer(r);
+                recoWrap.appendChild(item);
+            });
+
+            // Kick AI recommendations if configured
+            if (CONFIG.AI_RECO_URL) {
+                aiRecommend(p).then(aiList => {
+                    // Merge/replace UI with AI results (expected shape similar to product cards)
+                    // For demo, append labels
+                    const label = document.createElement('div');
+                    label.className = 'text-xs text-[color:var(--muted)] mt-2';
+                    label.textContent = 'AI suggestions';
+                    drawerContent.appendChild(label);
+                    const wrap = document.createElement('div');
+                    wrap.className = 'grid grid-cols-2 gap-2';
+                    aiList.slice(0, 4).forEach(r => {
+                        const el = document.createElement('div');
+                        el.className = 'card rounded-xl overflow-hidden';
+                        el.innerHTML = `
+                  <img src="${r.images?.[0] || p.images[0]}" class="w-full h-24 object-cover" />
+                  <div class="p-2">
+                    <div class="text-xs font-semibold">${r.brand || 'Suggested'}</div>
+                    <div class="text-xs">${r.name || 'Matching aesthetic'}</div>
+                  </div>
+                `;
+                        wrap.appendChild(el);
+                    });
+                    drawerContent.appendChild(wrap);
+                }).catch(() => {/* silently ignore */ });
+            }
+        }
+
+        // Local recommendation: cosine on tag overlap + brand/material boost
+        function recommendLocal(target, pool, k = 6) {
+            const score = (a) => {
+                let s = 0;
+                const setA = new Set(a.tags || []);
+                const setT = new Set(target.tags || []);
+                setT.forEach(t => { if (setA.has(t)) s += 2; });
+                if (a.brand === target.brand) s += 1.5;
+                if (a.material === target.material) s += 1.2;
+                if (a.category === target.category) s += 1.0;
+                s += a.popularity / 100 * 0.5;
+                return s;
+            };
+            return pool.filter(p => p.id !== target.id).map(p => ({ p, s: score(p) })).sort((x, y) => y.s - x.s).slice(0, k).map(x => x.p);
+        }
+
+        // AI Hooks
+        async function aiRecommend(product) {
+            const res = await fetch(CONFIG.AI_RECO_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': CONFIG.AI_KEY ? `Bearer ${CONFIG.AI_KEY}` : undefined },
+                body: JSON.stringify({ type: 'recommend', product })
+            });
+            if (!res.ok) throw new Error('AI recommend failed');
+            return res.json();
+        }
+
+        // AI Chat panel
+        const aiPanel = document.getElementById('aiPanel');
+        const aiBtn = document.getElementById('aiBtn');
+        const aiClose = document.getElementById('aiClose');
+        const aiSend = document.getElementById('aiSend');
+        const aiInput = document.getElementById('aiInput');
+        const aiMessages = document.getElementById('aiMessages');
+
+        aiBtn.onclick = () => { aiPanel.style.display = 'block'; state.aiOpen = true; };
+        aiClose.onclick = () => { aiPanel.style.display = 'none'; state.aiOpen = false; };
+
+        aiSend.onclick = async () => {
+            const msg = aiInput.value.trim();
+            if (!msg) return;
+            pushMsg('user', msg);
+            aiInput.value = '';
+            pushMsg('assistant', '…thinking');
+            try {
+                const reply = CONFIG.AI_CHAT_URL
+                    ? await aiChat(msg)
+                    : ruleBasedStylist(msg);
+                popLastAssistantAndPush(reply);
+            } catch (e) {
+                popLastAssistantAndPush('Sorry, I had trouble. Try rephrasing or ask a simpler question.');
+            }
+            aiMessages.scrollTop = aiMessages.scrollHeight;
+        };
+
+        function pushMsg(role, text) {
+            const bubble = document.createElement('div');
+            bubble.className = `text-sm ${role === 'user' ? '' : 'text-[color:var(--muted)]'}`;
+            bubble.textContent = (role === 'user' ? 'You: ' : 'AI: ') + text;
+            aiMessages.appendChild(bubble);
+        }
+        function popLastAssistantAndPush(text) {
+            const nodes = aiMessages.querySelectorAll('div');
+            if (nodes.length && nodes[nodes.length - 1].textContent.startsWith('AI: …thinking')) {
+                aiMessages.removeChild(nodes[nodes.length - 1]);
+            }
+            pushMsg('assistant', text);
+        }
+        async function aiChat(prompt) {
+            const res = await fetch(CONFIG.AI_CHAT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': CONFIG.AI_KEY ? `Bearer ${CONFIG.AI_KEY}` : undefined },
+                body: JSON.stringify({ prompt })
+            });
+            if (!res.ok) throw new Error('AI chat failed');
+            const data = await res.json();
+            return data.reply || JSON.stringify(data);
+        }
+        // Simple local stylist if no AI configured
+        function ruleBasedStylist(q) {
+            const has = (w) => q.toLowerCase().includes(w);
+            const budget = (() => {
+                const m = q.match(/₹?\s?(\d{2,6})/);
+                return m ? parseInt(m[1], 10) : null;
+            })();
+            const palette = has('black') ? 'Black with subtle gold hardware' :
+                has('white') ? 'Ivory with tonal detailing' :
+                    has('red') ? 'Deep bordeaux accents' : 'Neutral palette (camel/black)';
+            const material = has('silk') ? 'Silk for fluid drape' :
+                has('leather') ? 'Lambskin for structure' :
+                    has('cashmere') ? 'Cashmere for warmth' : 'Wool or cotton blend for versatility';
+            const rec = recommendLocal(DEMO_PRODUCTS[0], DEMO_PRODUCTS, 3).map(p => `${p.brand} ${p.name} (₹${p.price.toLocaleString('en-IN')})`);
+            return `Consider ${material} in ${palette}. Try: ${rec.join('; ')}${budget ? `. Aim under ₹${budget.toLocaleString('en-IN')} by prioritizing timeless pieces.` : ''}`;
+        }
+
+        // Auth demo
+        const authBtn = document.getElementById('authBtn');
+        const authModal = document.getElementById('authModal');
+        const authClose = document.getElementById('authClose');
+        const tabLogin = document.getElementById('tabLogin');
+        const tabSignup = document.getElementById('tabSignup');
+        const authForm = document.getElementById('authForm');
+        const authEmail = document.getElementById('authEmail');
+        const authPassword = document.getElementById('authPassword');
+        const authName = document.getElementById('authName');
+        const nameRow = document.getElementById('nameRow');
+        const authMsg = document.getElementById('authMsg');
+
+        let authMode = 'login';
+        function setAuthMode(mode) {
+            authMode = mode;
+            tabLogin.classList.toggle('ring', mode === 'login');
+            tabSignup.classList.toggle('ring', mode === 'signup');
+            nameRow.classList.toggle('hidden', mode !== 'signup');
+        }
+        setAuthMode('login');
+
+        authBtn.onclick = () => {
+            authModal.classList.add('show');
+            authMsg.textContent = state.user ? `Signed in as ${state.user.name || state.user.email}` : 'Sign in to sync wishlist and faster checkout.';
+        };
+        authClose.onclick = () => authModal.classList.remove('show');
+        tabLogin.onclick = () => setAuthMode('login');
+        tabSignup.onclick = () => setAuthMode('signup');
+
+        authForm.onsubmit = (e) => {
+            e.preventDefault();
+            const email = authEmail.value.trim().toLowerCase();
+            const pass = authPassword.value.trim();
+            if (!email || pass.length < 6) {
+                authMsg.textContent = 'Enter a valid email and a password with at least 6 characters.';
+                return;
+            }
+            if (authMode === 'signup') {
+                const name = authName.value.trim();
+                const user = { email, name, createdAt: Date.now() };
+                localStorage.setItem('user', JSON.stringify(user));
+                state.user = user;
+                authMsg.textContent = `Account created. Welcome, ${name || email}.`;
+            } else {
+                const existing = JSON.parse(localStorage.getItem('user') || 'null');
+                if (existing && existing.email === email) {
+                    state.user = existing;
+                    authMsg.textContent = `Welcome back, ${existing.name || email}.`;
+                } else {
+                    authMsg.textContent = 'No account found. Please sign up.';
+                }
+            }
+        };
+
+        // Hook for real auth backend (swap above demo)
+        async function onAuthSubmit(payload) {
+            // Example:
+            // const res = await fetch('https://api.yoursite.com/auth', { method:'POST', body: JSON.stringify(payload) });
+            // const user = await res.json();
+            // localStorage.setItem('user', JSON.stringify(user));
+            // state.user = user;
+        }
+
+        // Smooth intro animations
+        gsap.from('header', { y: -40, opacity: 0, duration: 0.6, ease: 'power3.out' });
+        gsap.from('section', { y: 18, opacity: 0, duration: 0.8, ease: 'power3.out', delay: 0.1 });
+        gsap.utils.toArray('.card').forEach((el, i) => {
+            gsap.from(el, { y: 20, opacity: 0, duration: 0.6, ease: 'power2.out', delay: 0.15 + i * 0.02 });
+        });
+
+        // 3D background: luxe grid + orbiting glow
+        (function init3D() {
+            const canvas = document.getElementById('bg3d');
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 1.2, 3.6);
+
+            const resize = () => {
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+            };
+            resize(); window.addEventListener('resize', resize);
+
+            // Grid plane
+            const gridGeo = new THREE.PlaneGeometry(20, 20, 40, 40);
+            const gridMat = new THREE.MeshBasicMaterial({ color: 0x2b2b2b, wireframe: true, opacity: 0.35, transparent: true });
+            const grid = new THREE.Mesh(gridGeo, gridMat);
+            grid.rotation.x = -Math.PI / 2;
+            grid.position.y = -1.2;
+            scene.add(grid);
+
+            // Glow orb
+            const orbGeo = new THREE.SphereGeometry(0.4, 32, 32);
+            const orbMat = new THREE.MeshBasicMaterial({ color: 0xD4AF37 }); // gold
+            const orb = new THREE.Mesh(orbGeo, orbMat);
+            scene.add(orb);
+
+            // Particles
+            const starsGeo = new THREE.BufferGeometry();
+            const N = 500;
+            const positions = new Float32Array(N * 3);
+            for (let i = 0; i < N; i++) {
+                positions[i * 3 + 0] = (Math.random() - 0.5) * 12;
+                positions[i * 3 + 1] = Math.random() * 5 + 0.5;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 12;
+            }
+            starsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const starsMat = new THREE.PointsMaterial({ color: 0x888888, size: 0.02 });
+            const stars = new THREE.Points(starsGeo, starsMat);
+            scene.add(stars);
+
+            let t = 0;
+            function animate() {
+                t += 0.01;
+                orb.position.x = Math.cos(t) * 1.4;
+                orb.position.z = Math.sin(t) * 1.4;
+                orb.position.y = 0.6 + Math.sin(t * 2) * 0.08;
+                stars.rotation.y += 0.0008;
+                grid.material.opacity = 0.25 + 0.1 * Math.sin(t * 0.7);
+                renderer.setClearColor(0x0b0b0b, 1);
+                renderer.render(scene, camera);
+                requestAnimationFrame(animate);
+            }
+            animate();
+
+            // Mouse parallax
+            window.addEventListener('mousemove', (e) => {
+                const x = (e.clientX / window.innerWidth - 0.5) * 0.9;
+                const y = (e.clientY / window.innerHeight - 0.5) * 0.4;
+                camera.position.x = x * 2.0;
+                camera.position.y = 1.2 + y * 1.0;
+                camera.lookAt(0, 0, 0);
+            });
+        })();
+
+        // Preload AI reco on filters change (if configured)
+        function preloadAIRecommendations() {
+            // No-op in demo; call backend if desired
+        }
+
+        // Initial render
+        refreshItems();
+
+        // Explore button
+        document.getElementById('exploreBtn').onclick = () => {
+            window.scrollTo({ top: document.getElementById('feed').offsetTop - 100, behavior: 'smooth' });
+        };
+
+        // Close autocomplete on outside click
+        document.addEventListener('click', (e) => {
+            if (!autocomplete.contains(e.target) && e.target !== searchInput) hideAutocomplete();
+        });
+    </script>
+</body>
+</html>
